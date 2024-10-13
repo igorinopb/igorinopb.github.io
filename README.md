@@ -1,65 +1,3 @@
-<?php
-class Funcionario {
-    private $nomeCompleto;
-    private $dataNascimento;
-    private $funcao;
-    private $telefone;
-    private $corFundo;
-    private $email;
-    private $salarioLiquido;
-    private $salarioBruto;
-
-    // Métodos GET
-    public function setNomeCompleto($nomeCompleto) { $this->nomeCompleto = $nomeCompleto; }
-    public function getNomeCompleto() { return $this->nomeCompleto; }
-    public function getDataNascimento() { return $this->dataNascimento; }
-    public function getFuncao() { return $this->funcao; }
-    public function getTelefone() { return $this->telefone; }
-    public function getCorFundo() { return $this->corFundo; }
-    public function getEmail() { return $this->email; }
-    public function getSalarioLiquido() { return $this->salarioLiquido; }
-    public function getSalarioBruto() { return $this->salarioBruto; }
-
-    // Métodos SET
-    public function setNomeCompleto($nomeCompleto) { $this->nomeCompleto = $nomeCompleto; }
-    public function setDataNascimento($dataNascimento) { $this->dataNascimento = $dataNascimento; }
-    public function setFuncao($funcao) { $this->funcao = $funcao; }
-    public function setTelefone($telefone) { $this->telefone = $telefone; }
-    public function setCorFundo($corFundo) { $this->corFundo = $corFundo; }
-    public function setEmail($email) { $this->email = $email; }
-    public function setSalarioLiquido($salarioLiquido) { $this->salarioLiquido = $salarioLiquido; }
-    public function setSalarioBruto($salarioBruto) { $this->salarioBruto = $salarioBruto; }
-
-    public function calculaDesconto() {
-        return $this->salarioBruto - $this->salarioLiquido;
-    }
-}
-
-// Processamento do formulário
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $funcionario = new Funcionario();
-    $funcionario->setNomeCompleto($_POST['nome']);
-    $funcionario->setDataNascimento($_POST['dataNascimento']);
-    $funcionario->setFuncao($_POST['funcao']);
-    $funcionario->setTelefone($_POST['telefone']);
-    $funcionario->setCorFundo($_POST['corFundo']);
-    $funcionario->setEmail($_POST['email']);
-    $funcionario->setSalarioLiquido($_POST['salarioLiquido']);
-    $funcionario->setSalarioBruto($_POST['salarioBruto']);
-
-    // Salvar preferência de cor no cookie
-    setcookie('corFundo', $_POST['corFundo'], time() + (86400 * 30), "/"); // 30 dias
-
-    // Obter informação sobre a data de nascimento via API
-    $dataNascimento = $funcionario->getDataNascimento();
-    $numbersApiUrl = "http://numbersapi.com/" . date('m/d', strtotime($dataNascimento)) . "/date";
-    $factAboutDate = @file_get_contents($numbersApiUrl) ?: "Não foi possível obter informações sobre esta data.";
-}
-
-// Verificar se existe um cookie com a preferência de cor
-$corFundoPreferida = isset($_COOKIE['corFundo']) ? $_COOKIE['corFundo'] : 'clara';
-?>
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -69,15 +7,15 @@ $corFundoPreferida = isset($_COOKIE['corFundo']) ? $_COOKIE['corFundo'] : 'clara
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            background-color: <?php echo $corFundoPreferida === 'clara' ? '#f8f9fa' : '#343a40'; ?>;
-            color: <?php echo $corFundoPreferida === 'clara' ? '#212529' : '#f8f9fa'; ?>;
+            background-color: #f8f9fa;
+            color: #212529;
         }
     </style>
 </head>
 <body>
     <div class="container mt-5">
         <h1 class="mb-4">Cadastro de Funcionário</h1>
-        <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
+        <form id="funcionarioForm">
             <div class="mb-3">
                 <label for="nome" class="form-label">Nome Completo:</label>
                 <input type="text" class="form-control" id="nome" name="nome" required>
@@ -115,23 +53,76 @@ $corFundoPreferida = isset($_COOKIE['corFundo']) ? $_COOKIE['corFundo'] : 'clara
             </div>
             <button type="submit" class="btn btn-primary">Cadastrar</button>
         </form>
-
-        <?php if (isset($funcionario)): ?>
-            <h2 class="mt-5">Dados do Funcionário</h2>
-            <ul class="list-group">
-                <li class="list-group-item">Nome: <?php echo $funcionario->getNomeCompleto(); ?></li>
-                <li class="list-group-item">Data de Nascimento: <?php echo $funcionario->getDataNascimento(); ?></li>
-                <li class="list-group-item">Função: <?php echo $funcionario->getFuncao(); ?></li>
-                <li class="list-group-item">Telefone: <?php echo $funcionario->getTelefone(); ?></li>
-                <li class="list-group-item">Cor de Fundo: <?php echo $funcionario->getCorFundo(); ?></li>
-                <li class="list-group-item">E-mail: <?php echo $funcionario->getEmail(); ?></li>
-                <li class="list-group-item">Salário Líquido: R$ <?php echo number_format($funcionario->getSalarioLiquido(), 2, ',', '.'); ?></li>
-                <li class="list-group-item">Salário Bruto: R$ <?php echo number_format($funcionario->getSalarioBruto(), 2, ',', '.'); ?></li>
-                <li class="list-group-item">Desconto: R$ <?php echo number_format($funcionario->calculaDesconto(), 2, ',', '.'); ?></li>
-            </ul>
-            <p class="mt-3">Fato sobre a data de nascimento: <?php echo $factAboutDate; ?></p>
-        <?php endif; ?>
+        <div id="dadosFuncionario" class="mt-5" style="display:none;">
+            <h2>Dados do Funcionário</h2>
+            <ul id="dadosList" class="list-group"></ul>
+            <p id="fatoDataNascimento" class="mt-3"></p>
+        </div>
     </div>
+    <script>
+        class Funcionario {
+            constructor(nomeCompleto, dataNascimento, funcao, telefone, corFundo, email, salarioLiquido, salarioBruto) {
+                this.nomeCompleto = nomeCompleto;
+                this.dataNascimento = dataNascimento;
+                this.funcao = funcao;
+                this.telefone = telefone;
+                this.corFundo = corFundo;
+                this.email = email;
+                this.salarioLiquido = salarioLiquido;
+                this.salarioBruto = salarioBruto;
+            }
+            calculaDesconto() {
+                return this.salarioBruto - this.salarioLiquido;
+            }
+        }
+        document.getElementById("funcionarioForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const nome = document.getElementById("nome").value;
+            const dataNascimento = document.getElementById("dataNascimento").value;
+            const funcao = document.getElementById("funcao").value;
+            const telefone = document.getElementById("telefone").value;
+            const corFundo = document.getElementById("corFundo").value;
+            const email = document.getElementById("email").value;
+            const salarioLiquido = parseFloat(document.getElementById("salarioLiquido").value);
+            const salarioBruto = parseFloat(document.getElementById("salarioBruto").value);
+            const funcionario = new Funcionario(nome, dataNascimento, funcao, telefone, corFundo, email, salarioLiquido, salarioBruto);
+            // Save background preference in localStorage
+            localStorage.setItem("corFundo", corFundo);
+            // Fetch information about the date of birth
+            let factAboutDate = "Não foi possível obter informações sobre esta data.";
+            try {
+                const response = await fetch(`http://numbersapi.com/${new Date(dataNascimento).getMonth() + 1}/${new Date(dataNascimento).getDate()}/date`);
+                factAboutDate = await response.text();
+            } catch (error) {
+                console.error("Erro ao obter informações da API:", error);
+            }
+            // Display the data
+            const dadosList = document.getElementById("dadosList");
+            dadosList.innerHTML = `
+                <li class="list-group-item">Nome: ${funcionario.nomeCompleto}</li>
+                <li class="list-group-item">Data de Nascimento: ${funcionario.dataNascimento}</li>
+                <li class="list-group-item">Função: ${funcionario.funcao}</li>
+                <li class="list-group-item">Telefone: ${funcionario.telefone}</li>
+                <li class="list-group-item">Cor de Fundo: ${funcionario.corFundo}</li>
+                <li class="list-group-item">E-mail: ${funcionario.email}</li>
+                <li class="list-group-item">Salário Líquido: R$ ${funcionario.salarioLiquido.toFixed(2)}</li>
+                <li class="list-group-item">Salário Bruto: R$ ${funcionario.salarioBruto.toFixed(2)}</li>
+                <li class="list-group-item">Desconto: R$ ${funcionario.calculaDesconto().toFixed(2)}</li>
+            `;
+            document.getElementById("fatoDataNascimento").textContent = `Fato sobre a data de nascimento: ${factAboutDate}`;
+            document.getElementById("dadosFuncionario").style.display = "block";
+            // Apply the background color
+            document.body.style.backgroundColor = corFundo === 'clara' ? '#f8f9fa' : '#343a40';
+            document.body.style.color = corFundo === 'clara' ? '#212529' : '#f8f9fa';
+        });
+        // Set background color based on localStorage preference
+        const savedCorFundo = localStorage.getItem("corFundo");
+        if (savedCorFundo) {
+            document.body.style.backgroundColor = savedCorFundo === 'clara' ? '#f8f9fa' : '#343a40';
+            document.body.style.color = savedCorFundo === 'clara' ? '#212529' : '#f8f9fa';
+            document.getElementById("corFundo").value = savedCorFundo;
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
